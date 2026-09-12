@@ -192,15 +192,15 @@ def _setup_passport_page(doc):
         p2.text = ""
         p2.alignment = WD_ALIGN_PARAGRAPH.CENTER
         p2.paragraph_format.space_before = Pt(0)
-        p2.paragraph_format.space_after = Pt(8)
+        p2.paragraph_format.space_after = Pt(4)
         # Jinja conditional block: only renders on page 2 when photo_passport is present
-        r_if = _make_run("{% if photo_passport %}", bold=False, size=16)
+        r_if = _make_run("{% if photo_passport %}", bold=False, size=14)
         p2._element.append(r_if)
-        r_title = _make_run("PASSPORT\n\n", bold=True, size=28, color="1B365D")
+        r_title = _make_run("PASSPORT\n", bold=True, size=20, color="1B365D")
         p2._element.append(r_title)
-        r_img = _make_run("{{ photo_passport }}", bold=False, size=20)
+        r_img = _make_run("{{ photo_passport }}", bold=False, size=16)
         p2._element.append(r_img)
-        r_endif = _make_run("{% endif %}", bold=False, size=16)
+        r_endif = _make_run("{% endif %}", bold=False, size=14)
         p2._element.append(r_endif)
 
 

@@ -21,7 +21,7 @@ LOGO_PATH = os.path.join(ROOT, "template", "assets", "logo.png")
 LOGO_BOX = (2.8, 1.35)
 FACE_BOX = (1.5, 1.6)
 FULL_BOX = (2.45, 5.8)
-PASSPORT_BOX = (6.5, 8.8)
+PASSPORT_BOX = (6.0, 7.5)
 
 
 def _select_passport_page(doc):

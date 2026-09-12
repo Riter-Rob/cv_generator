@@ -123,9 +123,18 @@ def _resolve_passport_path():
     up = st.session_state.get("passport_up")
     pick = st.session_state.get("passport_pick")
     if up is not None:
-        return save_upload(up, TMP)
+        p = save_upload(up, TMP)
+        if p and os.path.exists(p):
+            st.session_state["_cached_passport_path"] = p
+            return p
     if pick:
-        return os.path.join(IN_PASS, pick)
+        p = os.path.join(IN_PASS, pick)
+        if os.path.exists(p):
+            st.session_state["_cached_passport_path"] = p
+            return p
+    cached = st.session_state.get("_cached_passport_path")
+    if cached and os.path.exists(cached):
+        return cached
     return None
 
 
@@ -134,6 +143,7 @@ def read_passport_cb():
     if not path or not os.path.exists(path):
         st.session_state["_ocr_msg"] = ("warning", "Upload or pick a passport first.")
         return
+    st.session_state["_cached_passport_path"] = path
     try:
         data = ocr.read_passport(path)
         st.session_state["_ocr"] = data

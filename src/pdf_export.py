@@ -202,20 +202,20 @@ def append_passport(pdf_path, passport_path):
     # Always keep Page 0 (the form)
     out.insert_pdf(src, from_page=0, to_page=0)
 
-    # Check if any subsequent page in the converted PDF already contains the passport
-    passport_found = False
+    # Check if any subsequent page in the converted PDF already contains a real passport IMAGE
+    passport_page_index = None
     for i in range(1, len(src)):
         page = src[i]
-        txt = page.get_text().strip()
         imgs = page.get_images()
-        # If this page has passport content, keep it as page 2
-        if "PASSPORT" in txt or (len(imgs) > 0 and len(txt) < 80):
-            out.insert_pdf(src, from_page=i, to_page=i)
-            passport_found = True
+        txt = page.get_text().strip()
+        # A valid passport page MUST contain an image!
+        if len(imgs) > 0 and ("PASSPORT" in txt or len(txt) < 150):
+            passport_page_index = i
             break
 
-    # If no passport page was found in the document, append directly from passport_path
-    if not passport_found and passport_path and os.path.exists(passport_path):
+    if passport_page_index is not None:
+        out.insert_pdf(src, from_page=passport_page_index, to_page=passport_page_index)
+    elif passport_path and os.path.exists(passport_path):
         try:
             png, w, h = _passport_image_bytes(passport_path)
             page = out.new_page(width=595, height=842)  # A4 portrait (points)

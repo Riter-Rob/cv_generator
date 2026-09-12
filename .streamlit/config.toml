@@ -1,10 +1,8 @@
 [server]
 headless = true
-enableXsrfProtection = true
-maxUploadSize = 30
+enableCORS = false
+enableXsrfProtection = false
+maxUploadSize = 50
 
 [browser]
 gatherUsageStats = false
-
-[theme]
-primaryColor = "#C0504D"

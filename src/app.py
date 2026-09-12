@@ -70,11 +70,27 @@ CHOICES = {
 st.set_page_config(page_title="CV Generator", page_icon="🪪", layout="wide")
 
 
+IMG_TYPES = ["jpg", "jpeg", "png", "webp", "jfif", "bmp", "tiff"]
+PASS_TYPES = ["jpg", "jpeg", "png", "webp", "jfif", "bmp", "tiff", "pdf"]
+
+
 # ---------- helpers -----------------------------------------------------------
 def save_upload(uploaded, folder, name=None):
-    path = os.path.join(folder, name or uploaded.name)
+    if uploaded is None:
+        return None
+    fname = name or getattr(uploaded, "name", "upload")
+    fname = os.path.basename(fname).replace("/", "_").replace("\\", "_")
+    path = os.path.join(folder, fname)
+    try:
+        uploaded.seek(0)
+    except Exception:
+        pass
     with open(path, "wb") as f:
         f.write(uploaded.getbuffer())
+    try:
+        uploaded.seek(0)
+    except Exception:
+        pass
     return path
 
 
@@ -118,18 +134,21 @@ def read_passport_cb():
     if not path or not os.path.exists(path):
         st.session_state["_ocr_msg"] = ("warning", "Upload or pick a passport first.")
         return
-    data = ocr.read_passport(path)
-    st.session_state["_ocr"] = data
-    for k in list(fields.PASSPORT_KEYS) + ["age"]:
-        v = data.get(k, "")
-        if v:
-            st.session_state[k] = str(v)
-    if data.get("_mrz_found"):
-        ok = "valid" if data.get("_mrz_valid") else "CHECK-DIGIT FAILED"
-        st.session_state["_ocr_msg"] = ("ok", f"Passport read - MRZ {ok}.")
-    else:
-        st.session_state["_ocr_msg"] = ("warning",
-                                        "MRZ not detected - type the passport fields manually.")
+    try:
+        data = ocr.read_passport(path)
+        st.session_state["_ocr"] = data
+        for k in list(fields.PASSPORT_KEYS) + ["age"]:
+            v = data.get(k, "")
+            if v:
+                st.session_state[k] = str(v)
+        if data.get("_mrz_found"):
+            ok = "valid" if data.get("_mrz_valid") else "CHECK-DIGIT FAILED"
+            st.session_state["_ocr_msg"] = ("ok", f"Passport read - MRZ {ok}.")
+        else:
+            st.session_state["_ocr_msg"] = ("warning",
+                                            "MRZ not detected - type the passport fields manually.")
+    except Exception as e:
+        st.session_state["_ocr_msg"] = ("warning", f"Could not read passport: {e}")
 
 
 # ---------- single applicant tab ---------------------------------------------
@@ -140,9 +159,9 @@ def single_tab():
     with left:
         st.subheader("1) Passport")
         st.file_uploader("Upload passport (image or PDF)",
-                         type=["jpg", "jpeg", "png", "pdf"], key="passport_up")
+                         type=PASS_TYPES, key="passport_up")
         existing = sorted([f for f in os.listdir(IN_PASS)
-                           if f.lower().endswith((".jpg", ".jpeg", ".png", ".pdf"))])
+                           if f.lower().endswith(tuple("." + ext for ext in PASS_TYPES))])
         st.selectbox("...or pick an existing passport", [""] + existing, key="passport_pick")
         st.button("Read passport & auto-fill", type="secondary", on_click=read_passport_cb)
 
@@ -154,8 +173,8 @@ def single_tab():
             st.caption("Verify these OCR guesses: " + ", ".join(data["_low_confidence"]))
 
         st.subheader("2) Photos (optional)")
-        st.file_uploader("Face photo", type=["jpg", "jpeg", "png"], key="face_up")
-        st.file_uploader("Full-body photo", type=["jpg", "jpeg", "png"], key="full_up")
+        st.file_uploader("Face photo", type=IMG_TYPES, key="face_up")
+        st.file_uploader("Full-body photo", type=IMG_TYPES, key="full_up")
 
     with right:
         st.subheader("3) Details")
@@ -205,10 +224,10 @@ def _generate_single(make_pdf):
         v = st.session_state.get(k, "")
         values[k] = record._norm_skill(v) if k in fields.SKILL_KEYS else str(v).strip()
 
-    face = save_upload(st.session_state["face_up"], TMP, "face_" + st.session_state["face_up"].name) \
-        if st.session_state.get("face_up") else None
-    full = save_upload(st.session_state["full_up"], TMP, "full_" + st.session_state["full_up"].name) \
-        if st.session_state.get("full_up") else None
+    face_up = st.session_state.get("face_up")
+    full_up = st.session_state.get("full_up")
+    face = save_upload(face_up, TMP, "face_" + os.path.basename(face_up.name)) if face_up else None
+    full = save_upload(full_up, TMP, "full_" + os.path.basename(full_up.name)) if full_up else None
 
     out_name = generate.sanitize(st.session_state.get("output_name")
                                  or values.get("full_name") or "applicant")

@@ -161,18 +161,24 @@ def _select_passport_page(doc):
 
 def _passport_image_bytes(passport_path):
     """Return (png_bytes, width_px, height_px) for an image or pdf passport."""
-    import fitz
     ext = os.path.splitext(passport_path)[1].lower()
     if ext == ".pdf":
+        import fitz
         doc = fitz.open(passport_path)
         page = _select_passport_page(doc)
         pm = page.get_pixmap(dpi=200)
         doc.close()
+        return pm.tobytes("png"), pm.width, pm.height
     else:
-        pm = fitz.Pixmap(passport_path)
-        if pm.alpha or pm.n >= 5:
-            pm = fitz.Pixmap(fitz.csRGB, pm)
-    return pm.tobytes("png"), pm.width, pm.height
+        from PIL import Image, ImageOps
+        import io
+        with Image.open(passport_path) as im:
+            im = ImageOps.exif_transpose(im)
+            im = im.convert("RGB")
+            buf = io.BytesIO()
+            im.save(buf, format="PNG")
+            buf.seek(0)
+            return buf.getvalue(), im.width, im.height
 
 
 def _last_content_page(doc):

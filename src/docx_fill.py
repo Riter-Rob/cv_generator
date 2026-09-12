@@ -14,8 +14,11 @@ from docx.shared import Inches
 # photo boxes (width_in, height_in). Images are fit INSIDE the box, preserving
 # aspect ratio, so portrait and landscape both look right and a tall photo can
 # never grow the form onto a second page.
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+LOGO_PATH = os.path.join(ROOT, "template", "assets", "logo.png")
+LOGO_BOX = (2.8, 1.35)
 FACE_BOX = (1.5, 1.6)
-FULL_BOX = (2.35, 3.3)
+FULL_BOX = (2.45, 5.8)
 PASSPORT_BOX = (6.5, 8.8)
 _IMG_EXT = (".jpg", ".jpeg", ".png", ".bmp", ".webp")
 
@@ -61,6 +64,20 @@ def _image_or_blank(tpl, path, box):
     return ""
 
 
+def _select_passport_page(doc):
+    if len(doc) == 1:
+        return doc[0]
+    if "APPLICATION FOR EMPLOYMENT" in doc[0].get_text():
+        for idx in range(1, len(doc)):
+            if len(doc[idx].get_images()) > 0 or "PASSPORT" in doc[idx].get_text():
+                return doc[idx]
+        return doc[-1]
+    for idx, page in enumerate(doc):
+        if "P<" in page.get_text():
+            return page
+    return doc[0]
+
+
 def _passport_or_blank(tpl, path, box=PASSPORT_BOX):
     """Return InlineImage for an image or PDF passport, or blank string."""
     if not path or not os.path.exists(path):
@@ -71,12 +88,7 @@ def _passport_or_blank(tpl, path, box=PASSPORT_BOX):
             import fitz
             import io
             doc = fitz.open(path)
-            best_page = doc[0]
-            if len(doc) > 1:
-                for p in doc:
-                    if p.get_images():
-                        best_page = p
-                        break
+            best_page = _select_passport_page(doc)
             pm = best_page.get_pixmap(dpi=200)
             doc.close()
             buf = io.BytesIO(pm.tobytes("png"))
@@ -88,9 +100,11 @@ def _passport_or_blank(tpl, path, box=PASSPORT_BOX):
     return ""
 
 
-def fill_cv(template_path, values, out_docx, photo_face=None, photo_full=None, passport_path=None):
+def fill_cv(template_path, values, out_docx, photo_face=None, photo_full=None,
+            passport_path=None, logo_path=None):
     tpl = DocxTemplate(template_path)
     ctx = dict(values)
+    ctx["photo_logo"] = _image_or_blank(tpl, logo_path or LOGO_PATH, LOGO_BOX)
     ctx["photo_face"] = _image_or_blank(tpl, photo_face, FACE_BOX)
     ctx["photo_full"] = _image_or_blank(tpl, photo_full, FULL_BOX)
     ctx["photo_passport"] = _passport_or_blank(tpl, passport_path, PASSPORT_BOX)

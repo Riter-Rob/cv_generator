@@ -25,6 +25,7 @@ OUT = os.path.join(ROOT, "template", "cv_template.docx")
 #   rep  : cell has default text (HOUSE MAID / SAR / KG ...) -> replace it
 #   img  : photo cell -> insert an image placeholder
 MAP = {
+    (1, 1):  ("img",  "photo_logo"),
     (1, 2):  ("img",  "photo_face"),
     (3, 2):  ("text", "full_name"),
     (4, 3):  ("rep",  "position"),
@@ -203,6 +204,23 @@ def _setup_passport_page(doc):
         p2._element.append(r_endif)
 
 
+def _remove_floating_logo(doc):
+    """Remove the floating Future New Logo drawing so it does not overlap with the table logo."""
+    for pic in doc.element.xpath(".//pic:pic"):
+        for cNvPr in pic.xpath(".//pic:cNvPr"):
+            if "Future" in cNvPr.get("descr", "") or "Future" in cNvPr.get("name", ""):
+                parent = pic.getparent()
+                if parent is not None:
+                    parent.remove(pic)
+    for shp in doc.element.findall(".//{urn:schemas-microsoft-com:vml}shape"):
+        title = shp.attrib.get("{urn:schemas-microsoft-com:office:office}title", "")
+        alt = shp.attrib.get("alt", "")
+        if "Future" in title or "Future" in alt:
+            parent = shp.getparent()
+            if parent is not None:
+                parent.remove(shp)
+
+
 def build():
     if not os.path.exists(ORIGINAL):
         raise SystemExit("Missing template/original.docx (the agency form).")
@@ -240,8 +258,12 @@ def build():
     # full-body photo: merge the tall left column into one cell
     _merge_fullbody_photo(rows, "{{ photo_full }}")
 
-    # center both photo cells
+    # remove floating logo so only the clean cell logo is rendered
+    _remove_floating_logo(doc)
+
+    # center photo and logo cells
     try:
+        _center_cell(rows[1].findall(qn("w:tc"))[1])   # logo box
         _center_cell(rows[1].findall(qn("w:tc"))[2])   # face box
         _center_cell(rows[4].findall(qn("w:tc"))[1])   # full-body box
     except IndexError:

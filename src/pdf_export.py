@@ -143,13 +143,30 @@ def folder_to_pdf(in_dir, out_dir):
 
 
 # ---- passport page ----------------------------------------------------------
+def _select_passport_page(doc):
+    if len(doc) == 1:
+        return doc[0]
+    # If page 0 is an application form, the passport is on subsequent pages
+    if "APPLICATION FOR EMPLOYMENT" in doc[0].get_text():
+        for idx in range(1, len(doc)):
+            if len(doc[idx].get_images()) > 0 or "PASSPORT" in doc[idx].get_text():
+                return doc[idx]
+        return doc[-1]
+    # Check for MRZ on any page
+    for idx, page in enumerate(doc):
+        if "P<" in page.get_text():
+            return page
+    return doc[0]
+
+
 def _passport_image_bytes(passport_path):
     """Return (png_bytes, width_px, height_px) for an image or pdf passport."""
     import fitz
     ext = os.path.splitext(passport_path)[1].lower()
     if ext == ".pdf":
         doc = fitz.open(passport_path)
-        pm = doc[0].get_pixmap(dpi=200)
+        page = _select_passport_page(doc)
+        pm = page.get_pixmap(dpi=200)
         doc.close()
     else:
         pm = fitz.Pixmap(passport_path)
@@ -168,27 +185,31 @@ def _last_content_page(doc):
 
 
 def append_passport(pdf_path, passport_path):
-    """Ensure pdf_path has the passport page as page 2.
-    If the template already rendered the passport on page 2 in DOCX, keeps it as-is.
-    Otherwise, rewrites pdf_path as [form page(s)] + [passport page], dropping
-    any trailing blank page."""
+    """Ensure pdf_path is exactly 2 pages: [page 1: form, page 2: passport].
+    Discards any blank intermediary pages (e.g. from container LibreOffice section breaks)."""
     import fitz
     if not os.path.exists(pdf_path):
         return pdf_path
     src = fitz.open(pdf_path)
-    # If the PDF already has 2 pages and page 2 contains an image or PASSPORT,
-    # the docx template already included the passport on page 2!
-    if src.page_count >= 2:
-        p2 = src[1]
-        if p2.get_images() or "PASSPORT" in p2.get_text():
-            src.close()
-            return pdf_path
-
     out = fitz.open()
-    last = _last_content_page(src)
-    out.insert_pdf(src, from_page=0, to_page=last)
 
-    if passport_path and os.path.exists(passport_path):
+    # Always keep Page 0 (the form)
+    out.insert_pdf(src, from_page=0, to_page=0)
+
+    # Check if any subsequent page in the converted PDF already contains the passport
+    passport_found = False
+    for i in range(1, len(src)):
+        page = src[i]
+        txt = page.get_text().strip()
+        imgs = page.get_images()
+        # If this page has passport content, keep it as page 2
+        if "PASSPORT" in txt or (len(imgs) > 0 and len(txt) < 80):
+            out.insert_pdf(src, from_page=i, to_page=i)
+            passport_found = True
+            break
+
+    # If no passport page was found in the document, append directly from passport_path
+    if not passport_found and passport_path and os.path.exists(passport_path):
         try:
             png, w, h = _passport_image_bytes(passport_path)
             page = out.new_page(width=595, height=842)  # A4 portrait (points)

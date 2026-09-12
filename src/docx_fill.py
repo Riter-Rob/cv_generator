@@ -17,7 +17,7 @@ from PIL import Image, ImageOps
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 LOGO_PATH = os.path.join(ROOT, "template", "assets", "logo.png")
 LOGO_BOX = (2.8, 1.35)
-FACE_BOX = (1.5, 1.6)
+FACE_BOX = (1.38, 1.74)
 FULL_BOX = (3.50, 5.75)
 PASSPORT_BOX = (6.0, 7.5)
 
@@ -116,7 +116,7 @@ def fill_cv(template_path, values, out_docx, photo_face=None, photo_full=None,
     tpl = DocxTemplate(template_path)
     ctx = dict(values)
     ctx["photo_logo"] = _safe_inline_image(tpl, logo_path or LOGO_PATH, LOGO_BOX)
-    ctx["photo_face"] = _safe_inline_image(tpl, photo_face, FACE_BOX)
+    ctx["photo_face"] = _safe_inline_image(tpl, photo_face, FACE_BOX, cover=True)
     ctx["photo_full"] = _safe_inline_image(tpl, photo_full, FULL_BOX, cover=True)
     ctx["photo_passport"] = _safe_inline_image(tpl, passport_path, PASSPORT_BOX)
 

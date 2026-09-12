@@ -57,8 +57,9 @@ def _libre_convert(src, out_dir):
                            "to export PDF. Install LibreOffice (see README).")
     os.makedirs(out_dir, exist_ok=True)
     import tempfile
+    from pathlib import Path
     profile_dir = tempfile.mkdtemp(prefix="lo_prof_")
-    profile_url = f"file://{profile_dir.replace(os.sep, '/')}"
+    profile_url = Path(profile_dir).as_uri()
     cmd = [
         exe,
         "--headless",
@@ -161,17 +162,22 @@ def _select_passport_page(doc):
 
 def _passport_image_bytes(passport_path):
     """Return (png_bytes, width_px, height_px) for an image or pdf passport."""
+    import fitz
+    from PIL import Image, ImageOps
+    import io
+
     ext = os.path.splitext(passport_path)[1].lower()
     if ext == ".pdf":
-        import fitz
-        doc = fitz.open(passport_path)
-        page = _select_passport_page(doc)
-        pm = page.get_pixmap(dpi=200)
-        doc.close()
-        return pm.tobytes("png"), pm.width, pm.height
-    else:
-        from PIL import Image, ImageOps
-        import io
+        try:
+            doc = fitz.open(passport_path)
+            page = _select_passport_page(doc)
+            pm = page.get_pixmap(dpi=200)
+            doc.close()
+            return pm.tobytes("png"), pm.width, pm.height
+        except Exception:
+            pass
+
+    try:
         with Image.open(passport_path) as im:
             im = ImageOps.exif_transpose(im)
             im = im.convert("RGB")
@@ -179,6 +185,16 @@ def _passport_image_bytes(passport_path):
             im.save(buf, format="PNG")
             buf.seek(0)
             return buf.getvalue(), im.width, im.height
+    except Exception:
+        # Fallback: try fitz if it was a PDF with unusual extension
+        try:
+            doc = fitz.open(passport_path)
+            page = _select_passport_page(doc)
+            pm = page.get_pixmap(dpi=200)
+            doc.close()
+            return pm.tobytes("png"), pm.width, pm.height
+        except Exception:
+            raise RuntimeError(f"Could not read passport file: {passport_path}")
 
 
 def _last_content_page(doc):
@@ -192,7 +208,7 @@ def _last_content_page(doc):
 
 def append_passport(pdf_path, passport_path):
     """Ensure pdf_path is exactly 2 pages: [page 1: form, page 2: passport].
-    Discards any blank intermediary pages (e.g. from container LibreOffice section breaks)."""
+    Discards any blank intermediary pages (e.g. from LibreOffice section breaks)."""
     import fitz
     if not os.path.exists(pdf_path):
         return pdf_path
@@ -202,16 +218,22 @@ def append_passport(pdf_path, passport_path):
     # Always keep Page 0 (the form)
     out.insert_pdf(src, from_page=0, to_page=0)
 
-    # Check if any subsequent page in the converted PDF already contains a real passport IMAGE
+    # Check if any subsequent page in the converted PDF contains the real passport image
     passport_page_index = None
     for i in range(1, len(src)):
         page = src[i]
-        imgs = page.get_images()
-        txt = page.get_text().strip()
-        # A valid passport page MUST contain an image!
-        if len(imgs) > 0 and ("PASSPORT" in txt or len(txt) < 150):
-            passport_page_index = i
-            break
+        placed_imgs = page.get_image_info()
+        txt = page.get_text().upper()
+        # Skip if this page is a form spillover
+        if "APPLICATION FOR EMPLOYMENT" in txt:
+            continue
+        # A valid passport page must have an actual rendered image on it
+        if len(placed_imgs) > 0 and ("PASSPORT" in txt or len(txt.strip()) < 150):
+            w = placed_imgs[0].get("width", 0)
+            h = placed_imgs[0].get("height", 0)
+            if w >= 200 or h >= 200 or "PASSPORT" in txt:
+                passport_page_index = i
+                break
 
     if passport_page_index is not None:
         out.insert_pdf(src, from_page=passport_page_index, to_page=passport_page_index)

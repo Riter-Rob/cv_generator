@@ -143,6 +143,27 @@ def _center_cell(tc):
     Paragraph(_first_p(tc), None).alignment = WD_ALIGN_PARAGRAPH.CENTER
 
 
+def _format_photo_cell(tc):
+    """Clean extra paragraphs, set zero spacing, and center alignment for photo containers."""
+    ps = tc.findall(qn("w:p"))
+    for extra in ps[1:]:
+        tc.remove(extra)
+    p = _first_p(tc)
+    Paragraph(p, None).alignment = WD_ALIGN_PARAGRAPH.CENTER
+    pPr = p.find(qn("w:pPr"))
+    if pPr is None:
+        pPr = OxmlElement("w:pPr")
+        p.insert(0, pPr)
+    for sp in pPr.findall(qn("w:spacing")):
+        pPr.remove(sp)
+    sp = OxmlElement("w:spacing")
+    sp.set(qn("w:before"), "0")
+    sp.set(qn("w:after"), "0")
+    sp.set(qn("w:line"), "240")
+    sp.set(qn("w:lineRule"), "auto")
+    pPr.append(sp)
+
+
 def _merge_fullbody_photo(rows, ph):
     """Vertically merge the left photo column (rows 4..29, cell 1) into one tall
     cell and drop the applicant's full-body photo into it."""
@@ -154,24 +175,8 @@ def _merge_fullbody_photo(rows, ph):
         tc = cells[col]
         _set_vmerge(tc, restart=(ri == top))
         if ri == top:
-            # remove any extra paragraphs in the cell
-            ps = tc.findall(qn("w:p"))
-            for extra_p in ps[1:]:
-                tc.remove(extra_p)
             _set_cell(tc, ph)
-            p = _first_p(tc)
-            pPr = p.find(qn("w:pPr"))
-            if pPr is None:
-                pPr = OxmlElement("w:pPr")
-                p.insert(0, pPr)
-            for sp in pPr.findall(qn("w:spacing")):
-                pPr.remove(sp)
-            sp = OxmlElement("w:spacing")
-            sp.set(qn("w:before"), "0")
-            sp.set(qn("w:after"), "0")
-            sp.set(qn("w:line"), "240")
-            sp.set(qn("w:lineRule"), "auto")
-            pPr.append(sp)
+            _format_photo_cell(tc)
 
 
 def _set_cell(tc, text):
@@ -278,11 +283,11 @@ def build():
     # remove floating logo so only the clean cell logo is rendered
     _remove_floating_logo(doc)
 
-    # center photo and logo cells
+    # center and format photo and logo cells
     try:
-        _center_cell(rows[1].findall(qn("w:tc"))[1])   # logo box
-        _center_cell(rows[1].findall(qn("w:tc"))[2])   # face box
-        _center_cell(rows[4].findall(qn("w:tc"))[1])   # full-body box
+        _center_cell(rows[1].findall(qn("w:tc"))[1])        # logo box
+        _format_photo_cell(rows[1].findall(qn("w:tc"))[2])  # face box
+        _format_photo_cell(rows[4].findall(qn("w:tc"))[1])  # full-body box
     except IndexError:
         pass
 

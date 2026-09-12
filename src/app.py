@@ -211,6 +211,7 @@ def _generate_single(make_pdf):
 
     out_name = generate.sanitize(st.session_state.get("output_name")
                                  or values.get("full_name") or "applicant")
+    docx_path = os.path.join(OUT, "docx", out_name + ".docx")
     passport = _resolve_passport_path()
     try:
         with st.spinner("Building document..."):

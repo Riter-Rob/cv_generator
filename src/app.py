@@ -191,7 +191,8 @@ def single_tab():
 
     st.divider()
     gcol1, gcol2 = st.columns([1, 3])
-    make_pdf = gcol2.checkbox("Also export PDF (uses Microsoft Word)", value=True, key="single_pdf")
+    engine_name = "Microsoft Word" if sys.platform == "win32" else "LibreOffice"
+    make_pdf = gcol2.checkbox(f"Also export PDF (uses {engine_name})", value=True, key="single_pdf")
     if gcol1.button("Generate CV", type="primary", use_container_width=True):
         _generate_single(make_pdf)
 
@@ -213,13 +214,14 @@ def _generate_single(make_pdf):
                                  or values.get("full_name") or "applicant")
     docx_path = os.path.join(OUT, "docx", out_name + ".docx")
     passport = _resolve_passport_path()
+    engine_name = "Microsoft Word" if sys.platform == "win32" else "LibreOffice"
     try:
         with st.spinner("Building document..."):
             docx_fill.fill_cv(TEMPLATE, values, docx_path, photo_face=face, photo_full=full,
                               passport_path=passport)
         pdf_path = None
         if make_pdf:
-            with st.spinner("Exporting PDF via Word..."):
+            with st.spinner(f"Exporting PDF via {engine_name}..."):
                 pdf_path = os.path.join(OUT, "pdf", out_name + ".pdf")
                 pdf_export.to_pdf(docx_path, pdf_path)
                 if passport:
@@ -231,7 +233,13 @@ def _generate_single(make_pdf):
                  f"close the .docx/.pdf (and any Word window) and click Generate again.")
     except Exception as e:
         st.session_state["single_result"] = None
-        st.error(f"Generation failed: {e}")
+        import traceback
+        err_type = type(e).__name__
+        err_msg = str(e).strip()
+        display_err = f"{err_type}: {err_msg}" if err_msg else err_type
+        st.error(f"Generation failed: {display_err}")
+        with st.expander("Error details"):
+            st.code(traceback.format_exc())
 
 
 def _render_single_result():
@@ -291,7 +299,8 @@ def batch_tab():
         st.warning("No Excel found. Upload one or create the starter sheet.")
         rows = []
 
-    make_pdf = st.checkbox("Export PDFs (uses Microsoft Word)", value=True, key="batch_pdf")
+    engine_name = "Microsoft Word" if sys.platform == "win32" else "LibreOffice"
+    make_pdf = st.checkbox(f"Export PDFs (uses {engine_name})", value=True, key="batch_pdf")
     if st.button("Generate all", type="primary", disabled=not rows):
         argv = ["--excel", excel_path, "--out", OUT]
         if not make_pdf:

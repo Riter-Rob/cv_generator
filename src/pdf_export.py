@@ -56,12 +56,39 @@ def _libre_convert(src, out_dir):
         raise RuntimeError("Neither Microsoft Word nor LibreOffice is available "
                            "to export PDF. Install LibreOffice (see README).")
     os.makedirs(out_dir, exist_ok=True)
-    subprocess.run(
-        [exe, "--headless", "--convert-to", "pdf", "--outdir", out_dir, src],
-        check=True, timeout=180,
-        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-    )
-    return os.path.join(out_dir, os.path.splitext(os.path.basename(src))[0] + ".pdf")
+    import tempfile
+    profile_dir = tempfile.mkdtemp(prefix="lo_prof_")
+    profile_url = f"file://{profile_dir.replace(os.sep, '/')}"
+    cmd = [
+        exe,
+        "--headless",
+        "--invisible",
+        "--nodefault",
+        "--nofirststartwizard",
+        "--nolockcheck",
+        "--nologo",
+        f"-env:UserInstallation={profile_url}",
+        "--convert-to", "pdf",
+        "--outdir", out_dir,
+        src,
+    ]
+    try:
+        res = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=180,
+        )
+        if res.returncode != 0:
+            err = (res.stderr or res.stdout or "").strip()
+            raise RuntimeError(f"LibreOffice PDF export failed (exit code {res.returncode}): {err}")
+    finally:
+        shutil.rmtree(profile_dir, ignore_errors=True)
+
+    expected = os.path.join(out_dir, os.path.splitext(os.path.basename(src))[0] + ".pdf")
+    if not os.path.exists(expected):
+        raise RuntimeError(f"LibreOffice completed but expected PDF was not found: {expected}")
+    return expected
 
 
 def to_pdf(src, dst):

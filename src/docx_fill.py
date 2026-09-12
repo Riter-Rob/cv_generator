@@ -97,7 +97,9 @@ def fill_cv(template_path, values, out_docx, photo_face=None, photo_full=None, p
     # any placeholder not supplied -> blank, so render never fails
     for var in tpl.get_undeclared_template_variables():
         ctx.setdefault(var, "")
-    os.makedirs(os.path.dirname(out_docx), exist_ok=True)
+    out_dir = os.path.dirname(out_docx)
+    if out_dir:
+        os.makedirs(out_dir, exist_ok=True)
     tpl.render(ctx)
     tpl.save(out_docx)
     return out_docx

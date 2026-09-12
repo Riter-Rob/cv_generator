@@ -1,0 +1,25 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+env/
+
+# Generated output (contains applicants' filled forms - do NOT commit)
+output/
+
+# Applicant inputs = personal data (passports, photos) - do NOT commit
+input/passports/*
+input/photos/*
+!input/passports/.gitkeep
+!input/photos/.gitkeep
+
+# Operator working sheet may contain personal data; app can recreate it
+input/applicants.xlsx
+
+# OS / editor
+.DS_Store
+Thumbs.db
+*~
+~$*

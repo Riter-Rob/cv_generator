@@ -1,0 +1,20 @@
+{
+  "field_defaults": {
+    "position": "HOUSE MAID",
+    "preferred_country": "SAUDI ARABIA",
+    "place_of_issue": "ADDIS ABABA"
+  },
+  "passport": {
+    "default_place_of_issue": "ADDIS ABABA",
+    "place_of_issue_by_country": {
+      "ETH": "ADDIS ABABA"
+    },
+    "validity_years_by_country": {
+      "ETH": 5
+    },
+    "derive_issue_from_expiry": true
+  },
+  "app": {
+    "port": 8531
+  }
+}

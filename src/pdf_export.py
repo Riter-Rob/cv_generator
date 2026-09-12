@@ -141,12 +141,22 @@ def _last_content_page(doc):
 
 
 def append_passport(pdf_path, passport_path):
-    """Rewrite pdf_path so it is [form page(s)] + [passport page].
-    Drops the template's trailing blank page."""
+    """Ensure pdf_path has the passport page as page 2.
+    If the template already rendered the passport on page 2 in DOCX, keeps it as-is.
+    Otherwise, rewrites pdf_path as [form page(s)] + [passport page], dropping
+    any trailing blank page."""
     import fitz
     if not os.path.exists(pdf_path):
         return pdf_path
     src = fitz.open(pdf_path)
+    # If the PDF already has 2 pages and page 2 contains an image or PASSPORT,
+    # the docx template already included the passport on page 2!
+    if src.page_count >= 2:
+        p2 = src[1]
+        if p2.get_images() or "PASSPORT" in p2.get_text():
+            src.close()
+            return pdf_path
+
     out = fitz.open()
     last = _last_content_page(src)
     out.insert_pdf(src, from_page=0, to_page=last)

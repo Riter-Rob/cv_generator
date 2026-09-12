@@ -159,7 +159,8 @@ def main(argv=None):
         # 4) fill docx
         out_docx = os.path.join(docx_dir, out_name + ".docx")
         try:
-            docx_fill.fill_cv(args.template, values, out_docx, photo_face=face, photo_full=full)
+            docx_fill.fill_cv(args.template, values, out_docx, photo_face=face, photo_full=full,
+                              passport_path=passport_path)
         except Exception as e:
             print("    FILL ERROR:", e)
             traceback.print_exc()

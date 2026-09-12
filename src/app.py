@@ -211,16 +211,16 @@ def _generate_single(make_pdf):
 
     out_name = generate.sanitize(st.session_state.get("output_name")
                                  or values.get("full_name") or "applicant")
-    docx_path = os.path.join(OUT, "docx", out_name + ".docx")
+    passport = _resolve_passport_path()
     try:
         with st.spinner("Building document..."):
-            docx_fill.fill_cv(TEMPLATE, values, docx_path, photo_face=face, photo_full=full)
+            docx_fill.fill_cv(TEMPLATE, values, docx_path, photo_face=face, photo_full=full,
+                              passport_path=passport)
         pdf_path = None
         if make_pdf:
             with st.spinner("Exporting PDF via Word..."):
                 pdf_path = os.path.join(OUT, "pdf", out_name + ".pdf")
                 pdf_export.to_pdf(docx_path, pdf_path)
-                passport = _resolve_passport_path()
                 if passport:
                     pdf_export.append_passport(pdf_path, passport)
         st.session_state["single_result"] = {"name": out_name, "docx": docx_path, "pdf": pdf_path}

@@ -129,12 +129,36 @@ def _clear_applicant():
         st.session_state.pop(k, None)
 
 
-def _show_image(data):
-    """st.image across Streamlit versions (use_container_width vs use_column_width)."""
-    try:
-        st.image(data, use_container_width=True)
-    except TypeError:
-        st.image(data, use_column_width=True)
+def _image_to_base64_data_uri(data_or_path):
+    import base64
+    if isinstance(data_or_path, str) and os.path.exists(data_or_path):
+        with open(data_or_path, "rb") as f:
+            raw = f.read()
+    elif isinstance(data_or_path, bytes):
+        raw = data_or_path
+    elif isinstance(data_or_path, str) and data_or_path.startswith("data:"):
+        return data_or_path
+    else:
+        return None
+    b64 = base64.b64encode(raw).decode("ascii")
+    return f"data:image/png;base64,{b64}"
+
+
+def _show_image(data_or_path, style="max-width: 100%; height: auto; border-radius: 6px;"):
+    """Render image safely as inline base64 HTML to prevent requireServerUri / media URL crashes."""
+    data_uri = _image_to_base64_data_uri(data_or_path)
+    if data_uri:
+        st.markdown(
+            f'<div style="margin: 8px 0; text-align: center;">'
+            f'<img src="{data_uri}" style="{style}" />'
+            f'</div>',
+            unsafe_allow_html=True,
+        )
+    else:
+        try:
+            st.image(data_or_path, use_container_width=True)
+        except Exception:
+            pass
 
 
 def _resolve_passport_path():
@@ -412,7 +436,7 @@ def batch_tab():
 def main():
     with st.sidebar:
         if os.path.exists(LOGO):
-            st.image(LOGO, use_column_width=True)
+            _show_image(LOGO, style="max-width: 100%; height: auto; margin-bottom: 8px;")
         st.markdown("### CV Generator")
         st.caption("Passport OCR + Excel data -> filled Application form (DOCX + PDF). "
                    "Runs entirely on this PC.")

@@ -119,6 +119,24 @@ def init_state():
     st.session_state.setdefault("output_name", "")
 
 
+def _clear_applicant():
+    """Reset the form, uploads and last result for a fresh applicant."""
+    for k in fields.ALL_KEYS:
+        st.session_state.pop(k, None)
+    for k in ("passport_up", "face_up", "full_up", "passport_pick",
+              "_ocr", "_ocr_msg", "_cached_passport_path", "single_result",
+              "output_name", "_do_ocr"):
+        st.session_state.pop(k, None)
+
+
+def _show_image(data):
+    """st.image across Streamlit versions (use_container_width vs use_column_width)."""
+    try:
+        st.image(data, use_container_width=True)
+    except TypeError:
+        st.image(data, use_column_width=True)
+
+
 def _resolve_passport_path():
     up = st.session_state.get("passport_up")
     pick = st.session_state.get("passport_pick")
@@ -164,6 +182,19 @@ def read_passport_cb():
 # ---------- single applicant tab ---------------------------------------------
 def single_tab():
     init_state()
+
+    # run a pending OCR request before the field widgets are built, so the
+    # auto-filled values land in the widgets (and show a visible spinner).
+    if st.session_state.pop("_do_ocr", False):
+        with st.spinner("Reading passport (OCR)…"):
+            read_passport_cb()
+
+    hdr_l, hdr_r = st.columns([3, 1])
+    hdr_l.caption("Fill one applicant, then Generate. Use **Start new applicant** "
+                  "before the next person to clear the form.")
+    hdr_r.button("🔄 Start new applicant", on_click=_clear_applicant,
+                 use_container_width=True)
+
     left, right = st.columns([1, 2], gap="large")
 
     with left:
@@ -173,7 +204,8 @@ def single_tab():
         existing = sorted([f for f in os.listdir(IN_PASS)
                            if f.lower().endswith(tuple("." + ext for ext in PASS_TYPES))])
         st.selectbox("...or pick an existing passport", [""] + existing, key="passport_pick")
-        st.button("Read passport & auto-fill", type="secondary", on_click=read_passport_cb)
+        st.button("Read passport & auto-fill", type="secondary",
+                  on_click=lambda: st.session_state.update(_do_ocr=True))
 
         msg = st.session_state.get("_ocr_msg")
         if msg:
@@ -222,6 +254,11 @@ def single_tab():
     gcol1, gcol2 = st.columns([1, 3])
     engine_name = "Microsoft Word" if sys.platform == "win32" else "LibreOffice"
     make_pdf = gcol2.checkbox(f"Also export PDF (uses {engine_name})", value=True, key="single_pdf")
+    has_passport = bool(st.session_state.get("passport_up")
+                        or st.session_state.get("passport_pick")
+                        or st.session_state.get("_cached_passport_path"))
+    if not has_passport:
+        gcol2.caption("⚠ No passport selected — the PDF will have no passport page 2.")
     if gcol1.button("Generate CV", type="primary", use_container_width=True):
         _generate_single(make_pdf)
 
@@ -255,7 +292,19 @@ def _generate_single(make_pdf):
                 pdf_export.to_pdf(docx_path, pdf_path)
                 if passport:
                     pdf_export.append_passport(pdf_path, passport)
-        st.session_state["single_result"] = {"name": out_name, "docx": docx_path, "pdf": pdf_path}
+
+        # cache bytes + preview ONCE so later reruns/uploads don't re-render
+        result = {"name": out_name}
+        with open(docx_path, "rb") as f:
+            result["docx_bytes"] = f.read()
+        if pdf_path and os.path.exists(pdf_path):
+            with open(pdf_path, "rb") as f:
+                result["pdf_bytes"] = f.read()
+            try:
+                result["preview"] = pdf_to_pngs(pdf_path)
+            except Exception:
+                result["preview"] = []
+        st.session_state["single_result"] = result
     except PermissionError:
         st.session_state["single_result"] = None
         st.error(f"Could not save '{out_name}'. The file is probably open - "
@@ -277,19 +326,19 @@ def _render_single_result():
         return
     st.success(f"Generated: {res['name']}")
     c1, c2 = st.columns(2)
-    if os.path.exists(res["docx"]):
-        with open(res["docx"], "rb") as f:
-            c1.download_button("Download .docx", f.read(), file_name=res["name"] + ".docx",
-                               use_container_width=True)
-    if res.get("pdf") and os.path.exists(res["pdf"]):
-        with open(res["pdf"], "rb") as f:
-            c2.download_button("Download .pdf", f.read(), file_name=res["name"] + ".pdf",
-                               type="primary", use_container_width=True)
-        st.subheader("Preview")
-        try:
-            for png in pdf_to_pngs(res["pdf"]):
-                st.image(png, use_container_width=True)
-        except Exception:
+    if res.get("docx_bytes"):
+        c1.download_button("Download .docx", res["docx_bytes"],
+                           file_name=res["name"] + ".docx", use_container_width=True)
+    if res.get("pdf_bytes"):
+        c2.download_button("Download .pdf", res["pdf_bytes"],
+                           file_name=res["name"] + ".pdf", type="primary",
+                           use_container_width=True)
+        preview = res.get("preview") or []
+        if preview:
+            st.subheader("Preview")
+            for png in preview:
+                _show_image(png)
+        else:
             st.info("PDF saved; preview unavailable.")
     else:
         st.info("DOCX saved in output/docx. Enable PDF export for a preview.")

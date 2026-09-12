@@ -288,7 +288,7 @@ def _render_single_result():
         st.subheader("Preview")
         try:
             for png in pdf_to_pngs(res["pdf"]):
-                st.image(png, use_column_width=True)
+                st.image(png, use_container_width=True)
         except Exception:
             st.info("PDF saved; preview unavailable.")
     else:

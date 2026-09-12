@@ -144,9 +144,9 @@ def _center_cell(tc):
 
 
 def _merge_fullbody_photo(rows, ph):
-    """Vertically merge the left photo column (rows 4..28, cell 1) into one tall
+    """Vertically merge the left photo column (rows 4..29, cell 1) into one tall
     cell and drop the applicant's full-body photo into it."""
-    top, bottom, col = 4, 28, 1
+    top, bottom, col = 4, 29, 1
     for ri in range(top, bottom + 1):
         cells = rows[ri].findall(qn("w:tc"))
         if col >= len(cells):
@@ -154,7 +154,24 @@ def _merge_fullbody_photo(rows, ph):
         tc = cells[col]
         _set_vmerge(tc, restart=(ri == top))
         if ri == top:
+            # remove any extra paragraphs in the cell
+            ps = tc.findall(qn("w:p"))
+            for extra_p in ps[1:]:
+                tc.remove(extra_p)
             _set_cell(tc, ph)
+            p = _first_p(tc)
+            pPr = p.find(qn("w:pPr"))
+            if pPr is None:
+                pPr = OxmlElement("w:pPr")
+                p.insert(0, pPr)
+            for sp in pPr.findall(qn("w:spacing")):
+                pPr.remove(sp)
+            sp = OxmlElement("w:spacing")
+            sp.set(qn("w:before"), "0")
+            sp.set(qn("w:after"), "0")
+            sp.set(qn("w:line"), "240")
+            sp.set(qn("w:lineRule"), "auto")
+            pPr.append(sp)
 
 
 def _set_cell(tc, text):

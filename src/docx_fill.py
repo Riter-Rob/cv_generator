@@ -13,14 +13,12 @@ from docxtpl import DocxTemplate, InlineImage
 from docx.shared import Inches
 from PIL import Image, ImageOps
 
-# photo boxes (width_in, height_in). Images are fit INSIDE the box, preserving
-# aspect ratio, so portrait and landscape both look right and a tall photo can
-# never grow the form onto a second page.
+# photo boxes (width_in, height_in).
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 LOGO_PATH = os.path.join(ROOT, "template", "assets", "logo.png")
 LOGO_BOX = (2.8, 1.35)
 FACE_BOX = (1.5, 1.6)
-FULL_BOX = (2.45, 5.8)
+FULL_BOX = (3.50, 5.75)
 PASSPORT_BOX = (6.0, 7.5)
 
 
@@ -38,14 +36,32 @@ def _select_passport_page(doc):
     return doc[0]
 
 
-def _safe_inline_image(tpl, source, box):
+def _crop_to_fill(im, target_w, target_h):
+    """Smart center-crop so the image matches target aspect ratio and fills the container."""
+    im_w, im_h = im.size
+    target_aspect = target_w / float(target_h)
+    im_aspect = im_w / float(im_h)
+    if im_aspect > target_aspect:
+        # Wider: crop extra sides, keep center
+        new_w = int(im_h * target_aspect)
+        left = (im_w - new_w) // 2
+        return im.crop((left, 0, left + new_w, im_h))
+    elif im_aspect < target_aspect:
+        # Taller: crop extra top/bottom (keep 20% top, 80% bottom for headroom)
+        new_h = int(im_w / target_aspect)
+        top_offset = max(0, int((im_h - new_h) * 0.20))
+        return im.crop((0, top_offset, im_w, top_offset + new_h))
+    return im
+
+
+def _safe_inline_image(tpl, source, box, cover=False):
     """
     Safely load any image (JPEG, PNG, WebP, BMP, TIFF, GIF, or PDF page),
     correct EXIF orientation, convert to RGB/RGBA, and return an InlineImage
     backed by a clean PNG BytesIO stream.
     
-    If the image is missing, corrupt, or cannot be read, returns "" (empty string)
-    so python-docx NEVER encounters an UnrecognizedImageError.
+    If cover=True, crops the image to match the container's aspect ratio
+    so it completely fills the box without distortion.
     """
     if not source:
         return ""
@@ -74,12 +90,19 @@ def _safe_inline_image(tpl, source, box):
         else:
             im = im.convert("RGB")
 
+        box_w, box_h = box
+        if cover:
+            im = _crop_to_fill(im, box_w, box_h)
+            buf = io.BytesIO()
+            im.save(buf, format="PNG")
+            buf.seek(0)
+            return InlineImage(tpl, buf, width=Inches(box_w), height=Inches(box_h))
+
         buf = io.BytesIO()
         im.save(buf, format="PNG")
         buf.seek(0)
 
         w, h = im.size
-        box_w, box_h = box
         aspect = h / float(w) if w else 1.0
         if box_w * aspect <= box_h:
             return InlineImage(tpl, buf, width=Inches(box_w))
@@ -94,7 +117,7 @@ def fill_cv(template_path, values, out_docx, photo_face=None, photo_full=None,
     ctx = dict(values)
     ctx["photo_logo"] = _safe_inline_image(tpl, logo_path or LOGO_PATH, LOGO_BOX)
     ctx["photo_face"] = _safe_inline_image(tpl, photo_face, FACE_BOX)
-    ctx["photo_full"] = _safe_inline_image(tpl, photo_full, FULL_BOX)
+    ctx["photo_full"] = _safe_inline_image(tpl, photo_full, FULL_BOX, cover=True)
     ctx["photo_passport"] = _safe_inline_image(tpl, passport_path, PASSPORT_BOX)
 
     # any placeholder not supplied -> blank, so render never fails

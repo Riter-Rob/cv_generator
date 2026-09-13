@@ -17,8 +17,8 @@ from PIL import Image, ImageOps
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 LOGO_PATH = os.path.join(ROOT, "template", "assets", "logo.png")
 LOGO_BOX = (2.8, 1.35)
-FACE_BOX = (1.38, 1.74)
-FULL_BOX = (3.50, 5.75)
+FACE_BOX = (1.388, 1.758)
+FULL_BOX = (3.523, 5.799)
 PASSPORT_BOX = (6.0, 7.5)
 
 
@@ -34,6 +34,34 @@ def _select_passport_page(doc):
         if "P<" in page.get_text():
             return page
     return doc[0]
+
+
+def _autotrim_whitespace(im, thresh=235):
+    """
+    Trim surrounding whitespace or screenshot borders from uploaded images so
+    the actual portrait or photo cleanly fills the container without an off-center shift.
+    """
+    try:
+        im_rgb = im.convert("RGB")
+        w, h = im_rgb.size
+        xs, ys = [], []
+        # Sample every 2 pixels for fast detection
+        for y in range(0, h, 2):
+            for x in range(0, w, 2):
+                r, g, b = im_rgb.getpixel((x, y))
+                if r < thresh or g < thresh or b < thresh:
+                    xs.append(x)
+                    ys.append(y)
+        if not xs or not ys:
+            return im
+        min_x, max_x = max(0, min(xs) - 1), min(w, max(xs) + 2)
+        min_y, max_y = max(0, min(ys) - 1), min(h, max(ys) + 2)
+        # Only trim if there is significant outer border whitespace (> 10px)
+        if min_x > 10 or min_y > 10 or (w - max_x) > 10 or (h - max_y) > 10:
+            return im.crop((min_x, min_y, max_x, max_y))
+    except Exception:
+        pass
+    return im
 
 
 def _crop_to_fill(im, target_w, target_h):
@@ -92,6 +120,7 @@ def _safe_inline_image(tpl, source, box, cover=False):
 
         box_w, box_h = box
         if cover:
+            im = _autotrim_whitespace(im)
             im = _crop_to_fill(im, box_w, box_h)
             buf = io.BytesIO()
             im.save(buf, format="PNG")

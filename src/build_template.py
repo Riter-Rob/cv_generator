@@ -144,7 +144,24 @@ def _center_cell(tc):
 
 
 def _format_photo_cell(tc):
-    """Clean extra paragraphs, set zero spacing, and center alignment for photo containers."""
+    """Zero cell margins, center alignment, and clean paragraph spacing for photo containers."""
+    tcPr = tc.get_or_add_tcPr()
+    for m in tcPr.findall(qn("w:tcMar")):
+        tcPr.remove(m)
+    tcMar = OxmlElement("w:tcMar")
+    for side in ("top", "left", "bottom", "right"):
+        node = OxmlElement(f"w:{side}")
+        node.set(qn("w:w"), "0")
+        node.set(qn("w:type"), "dxa")
+        tcMar.append(node)
+    tcPr.append(tcMar)
+
+    for v in tcPr.findall(qn("w:vAlign")):
+        tcPr.remove(v)
+    vAlign = OxmlElement("w:vAlign")
+    vAlign.set(qn("w:val"), "center")
+    tcPr.append(vAlign)
+
     ps = tc.findall(qn("w:p"))
     for extra in ps[1:]:
         tc.remove(extra)
@@ -154,6 +171,8 @@ def _format_photo_cell(tc):
     if pPr is None:
         pPr = OxmlElement("w:pPr")
         p.insert(0, pPr)
+    for ind in pPr.findall(qn("w:ind")):
+        pPr.remove(ind)
     for sp in pPr.findall(qn("w:spacing")):
         pPr.remove(sp)
     sp = OxmlElement("w:spacing")

@@ -140,6 +140,91 @@ def _safe_inline_image(tpl, source, box, cover=False):
         return ""
 
 
+def _zero_cell_margins(tc):
+    """Zero all margins and indents on a table cell and its paragraphs in the output doc."""
+    from docx.oxml.ns import qn as _qn
+    from docx.oxml import OxmlElement as _OE
+    from docx.enum.text import WD_ALIGN_PARAGRAPH
+    from docx.text.paragraph import Paragraph
+
+    tcPr = tc.get_or_add_tcPr()
+    for m in tcPr.findall(_qn("w:tcMar")):
+        tcPr.remove(m)
+    tcMar = _OE("w:tcMar")
+    for side in ("top", "left", "bottom", "right"):
+        node = _OE(f"w:{side}")
+        node.set(_qn("w:w"), "0")
+        node.set(_qn("w:type"), "dxa")
+        tcMar.append(node)
+    tcPr.append(tcMar)
+
+    for v in tcPr.findall(_qn("w:vAlign")):
+        tcPr.remove(v)
+    vAlign = _OE("w:vAlign")
+    vAlign.set(_qn("w:val"), "center")
+    tcPr.append(vAlign)
+
+    for p in tc.findall(_qn("w:p")):
+        Paragraph(p, None).alignment = WD_ALIGN_PARAGRAPH.CENTER
+        pPr = p.find(_qn("w:pPr"))
+        if pPr is None:
+            pPr = _OE("w:pPr")
+            p.insert(0, pPr)
+        for ind in pPr.findall(_qn("w:ind")):
+            pPr.remove(ind)
+        for sp in pPr.findall(_qn("w:spacing")):
+            pPr.remove(sp)
+        sp = _OE("w:spacing")
+        sp.set(_qn("w:before"), "0")
+        sp.set(_qn("w:after"), "0")
+        sp.set(_qn("w:line"), "240")
+        sp.set(_qn("w:lineRule"), "auto")
+        pPr.append(sp)
+
+        # Remove empty runs before the drawing run so nothing shifts the image left
+        runs = p.findall(_qn("w:r"))
+        has_drawing = any(r.find(_qn("w:drawing")) is not None for r in runs)
+        if has_drawing:
+            for r in runs:
+                if r.find(_qn("w:drawing")) is None:
+                    # Empty/text run before the image — remove it
+                    t_els = r.findall(_qn("w:t"))
+                    if not t_els or all((t.text or "").strip() == "" for t in t_els):
+                        p.remove(r)
+
+
+def _fix_photo_cells_in_output(docx_path):
+    """Post-process the rendered output DOCX to ensure photo cells have zero margins."""
+    import docx as _docx
+    from docx.oxml.ns import qn as _qn
+
+    doc = _docx.Document(docx_path)
+    tbl = None
+    for t in doc.element.body.xpath(".//w:tbl"):
+        for a in t.iterancestors():
+            if a.tag.split("}")[-1] == "Choice":
+                tbl = t
+                break
+        if tbl is not None:
+            break
+    if tbl is None:
+        tbls = doc.element.body.xpath(".//w:tbl")
+        tbl = tbls[0] if tbls else None
+    if tbl is None:
+        return
+
+    rows = tbl.findall(_qn("w:tr"))
+    try:
+        _zero_cell_margins(rows[1].findall(_qn("w:tc"))[2])   # face photo cell
+    except (IndexError, Exception):
+        pass
+    try:
+        _zero_cell_margins(rows[4].findall(_qn("w:tc"))[1])   # full-body photo cell
+    except (IndexError, Exception):
+        pass
+    doc.save(docx_path)
+
+
 def fill_cv(template_path, values, out_docx, photo_face=None, photo_full=None,
             passport_path=None, logo_path=None):
     tpl = DocxTemplate(template_path)
@@ -165,4 +250,12 @@ def fill_cv(template_path, values, out_docx, photo_face=None, photo_full=None,
         tpl.render(ctx)
 
     tpl.save(out_docx)
+
+    # Post-process: zero cell margins on photo cells in the rendered output
+    try:
+        _fix_photo_cells_in_output(out_docx)
+    except Exception:
+        pass
+
     return out_docx
+
